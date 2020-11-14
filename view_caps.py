@@ -11,6 +11,7 @@ import os
 import random
 import zipfile
 import numpy
+import argparse
 
 
 class ImageManager():
@@ -157,8 +158,9 @@ class MediaManager:
             self.set_scrollX(int(propX * self.unscaledX * self.scale), winX)
 
 class FileNavigator:
-    def __init__(self, dirname, tmp_dir):
+    def __init__(self, dirname, tmp_dir, resource_dir):
         self.tmp_dir = tmp_dir
+        self.resource_dir = resource_dir
 
         self.files = [os.path.join(dirname, f) for f in os.listdir(dirname) if os.path.isfile(os.path.join(dirname, f))]
         self.files.sort()
@@ -243,7 +245,7 @@ class FileNavigator:
                 # reading album
                 if self.albumfile is not None:
                     # We shouldn't have recursive albums
-                    return 'blank.jpg', 'album_error.txt'
+                    return os.path.join(self.resource_dir, 'blank.jpg'), os.path.join(self.resource_dir, 'album_error.txt')
 
                 self.albumfile = filename
                 self.subfiles = ziplist
@@ -253,9 +255,9 @@ class FileNavigator:
                 return self.multiplex(tmp_name)
 
         elif ext == '.txt':
-            return 'blank.jpg', filename
+            return os.path.join(self.resource_dir, 'blank.jpg'), filename
         else:
-            return filename, 'empty.txt'
+            return filename, os.path.join(self.resource_dir, 'empty.txt')
 
     def wipe_tmp(self):
         for file in os.listdir(self.tmp_dir):
@@ -285,7 +287,7 @@ class FileNavigator:
 
 
 class VideoPlayerApp:
-    def __init__(self, root, filename=None):
+    def __init__(self, root, dirname, filename):
         self.root = root
 
         m1 = tk.PanedWindow(root, borderwidth=16, sashrelief=tk.RAISED)
@@ -303,7 +305,8 @@ class VideoPlayerApp:
         root.update()
         m1.paneconfigure(self.imageLabel, width=(2*m1.winfo_width()/3))
 
-        self.fileNav = FileNavigator("..", "../Tmp")
+        source_dir = os.path.dirname(os.path.realpath(__file__))
+        self.fileNav = FileNavigator(dirname, os.path.join(source_dir, "tmp"), os.path.join(source_dir, "resources"))
 
         # select first file randomly and make a manager for it
         if filename is None:
@@ -384,12 +387,17 @@ class VideoPlayerApp:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="View collections of images and text.")
+    parser.add_argument('--dirname', default=".", help='The directory to be opened')
+    parser.add_argument('--filename', help='The file to be viewed (relative to dirname, can\'t be in a subdirectory)')
+
+    args = parser.parse_args()
+
     root = tk.Tk()
     root.title("Viewer")
     root.geometry("1400x900")
 
-    filename = "../024_A3FW4J7GWA.gif"
-    VideoPlayerApp(root, None)
+    VideoPlayerApp(root, args.dirname, args.filename)
 
     root.mainloop()
 
