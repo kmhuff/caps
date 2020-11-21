@@ -8,78 +8,70 @@ import glob
 import datetime
 import filetype
 
-def save_image(zip_file=None, filebase='saved'):
-    image_url = input("Enter/Paste the URL for your image.\n")
-    raw_filename = filebase + '.dat'
+def filebase(sequence):
+    return str(sequence) + '_' + datetime.datetime.now().strftime("%m%d%y%H%M%S")
 
-    data = requests.get(image_url, stream=True)
-    data.raw.decode_content = True
-
-    with open(raw_filename, 'wb') as f:
-        shutil.copyfileobj(data.raw, f)
-
-    ext = filetype.guess_extension(raw_filename)
-    if ext is None:
-        print("Filetype couldn't be detected, aborting")
-        os.remove(raw_filename)
-        return False
-
-    filename = filebase + '.' + ext
-    os.rename(raw_filename, filename)
-
-    if zip_file is not None:
-        zip_file.write(filename)
-        os.remove(filename)
-
-    return True
-
-def save_text(zip_file=None, filebase='saved'):
-    filename = filebase + '.txt'
-    print("Enter/Paste your content. Ctrl-D or Ctrl-Z ( windows ) to save it.")
-    contents = []
-    while True:
-        try:
-            line = input()
-        except EOFError:
-            break
-        contents.append(line)
-
-    output = '\n'.join(contents).strip()
-
-    if zip_file is None:
-        with open(filename, 'w') as f:
-            f.write(output)
+def write_data(filename, raw_data, location):
+    if isInstance(location, zipfile.ZipFile):
+        location.writestr(filename, raw_data)
+    elif isInstance(location, str):
+        with open(os.path.join(location, filename), 'wb') as file:
+            shutil.copyfileobj(raw_data, file)
     else:
-        zip_file.writestr(filename, output)
+        raise TypeError("location must be ZipFile or string path")
 
-    return True
+def save_image(raw_data, location, sequence=1):
+    ext = filetype.guess_extension(raw_data)
+    if ext is None:
+        raise RuntimeError("Could not guess filetype")
 
-def save_album(zip_file=None, filebase='saved'):
-    filename = filebase + '.zip'
-    if zip_file is not None:
-        print("Cannot save album in archive.")
-        return True
+    filename = filebase(sequence) + '.' + ext
 
-    with zipfile.ZipFile(filename, 'w') as file:
-        save_sequence("Saving [I]mage, [T]ext, or [C]aption? ([Q]uit)\n", file, None, "    ")
+    write_data(filename, raw_data, location)
 
-    return True
+def save_text(text, location, sequence=1):
+    filename = filebase(sequence) + '.txt'
 
-def save_caption(zip_file=None, filebase='saved'):
-    filename = filebase + '.zip'
-    with zipfile.ZipFile(filename, 'w') as file:
-        save_image(file)
-        save_text(file)
+    write_data(filename, text, location)
 
-    if zip_file is not None:
-        zip_file.write(filename)
+def save_album(cap_list, location, sequence=1):
+    if isInstance(location, zipfile.ZipFile):
+        raise TypeError("Recursive albums not allowed")
+
+    filename = os.path.join(location, filebase(sequence) + '.zip')
+
+    with zipfile.ZipFile(filename, 'w') as zipFile:
+        inner_seq = 1
+        for image, text in cap_list:
+            img_cap = image is not None
+            txt_cap = text is not None
+
+            if img_cap and txt_cap:
+                save_caption(image, text, zipFile, inner_seq)
+            elif img_cap:
+                save_image(image, zipFile, inner_seq)
+            elif txt_cap:
+                save_text(text, zipFile, inner_seq)
+
+            inner_seq += 1
+
+def save_caption(img_data, txt_data, location, sequence=1):
+    loc_str = isInstance(location, str)
+    loc_zip = isInstance(location, zipfile.ZipFile)
+    if not loc_str and not loc_zip:
+        raise TypeError("location must be ZipFile or string path")
+
+    filename = filebase(sequence) + '.zip'
+    if loc_str:
+        filename = os.path.join(location, filename)
+
+    with zipfile.ZipFile(filename, 'w') as zipFile:
+        save_image(img_data, zipFile)
+        save_text(txt_data, zipFile)
+
+    if loc_zip:
+        location.write(filename)
         os.remove(filename)
-
-    return True
-    
-def quit(zip_file=None, filename=None):
-    print("Quitting")
-    return False
 
 instructions = {
     "I":save_image,
