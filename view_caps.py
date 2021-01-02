@@ -12,6 +12,7 @@ import random
 import zipfile
 import numpy
 import argparse
+import filetype
 
 
 class ImageManager():
@@ -85,6 +86,8 @@ class VideoManager():
 
 class MediaManager:
     def __init__(self, filename):
+        file = filename
+
         self.scale = 1.0
         self.scrollX = 0
         self.scrollY = 0
@@ -95,11 +98,17 @@ class MediaManager:
 
         self.manager = None
 
-        _,ext = os.path.splitext(filename)
-        if ext in ['.jfif', '.jpeg', '.jpg', '.JPG', '.png', '.webp']:
-            self.manager = ImageManager(filename)
+        ext = filetype.guess_extension(file)
+        if ext is None:
+            print("Filetype of " + filename + " couldn't be detected, aborting")
+            file = "blank.jpg"
+            ext = "jpg"
+            #os.remove(raw_filename)
+
+        if ext in ['jfif', 'jpeg', 'jpg', 'JPG', 'png', 'webp']:
+            self.manager = ImageManager(file)
         else:
-            self.manager = VideoManager(filename)
+            self.manager = VideoManager(file)
 
     def get_frame(self, winX, winY):
         img = self.manager.get_raw_frame();
@@ -157,6 +166,7 @@ class MediaManager:
             self.set_scrollY(int(propY * self.unscaledY * self.scale), winY)
             self.set_scrollX(int(propX * self.unscaledX * self.scale), winX)
 
+
 class FileNavigator:
     def __init__(self, dirname, tmp_dir, resource_dir):
         self.tmp_dir = tmp_dir
@@ -208,8 +218,8 @@ class FileNavigator:
         self.wipe_tmp()
 
         tmp_name = os.path.join(self.tmp_dir, self.subfiles[self.subIdx])
-        with zipfile.ZipFile(albumfile) as zip:
-            zip.extract(self.subfiles[self.subIdx], tmp_name)
+        with zipfile.ZipFile(self.albumfile) as zip:
+            zip.extract(self.subfiles[self.subIdx], self.tmp_dir)
 
         return self.multiplex(tmp_name)
 
@@ -219,8 +229,8 @@ class FileNavigator:
         self.wipe_tmp()
 
         tmp_name = os.path.join(self.tmp_dir, self.subfiles[self.subIdx])
-        with zipfile.ZipFile(albumfile) as zip:
-            zip.extract(self.subfiles[self.subIdx], tmp_name)
+        with zipfile.ZipFile(self.albumfile) as zip:
+            zip.extract(self.subfiles[self.subIdx], self.tmp_dir)
 
         return self.multiplex(tmp_name)
 
@@ -284,6 +294,9 @@ class FileNavigator:
             return self.subfiles[self.subIdx]
         else:
             return None
+
+    def __del__(self):
+        self.wipe_tmp()
 
 
 class VideoPlayerApp:
