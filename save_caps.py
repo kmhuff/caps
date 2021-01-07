@@ -1,77 +1,90 @@
 #!/usr/bin/env python3
 
 import requests
-import shutil
-import os
-import zipfile
-import glob
-import datetime
-import filetype
+import pack_caps
+import argparse
 
-def filebase(sequence):
-    return str(sequence) + '_' + datetime.datetime.now().strftime("%m%d%y%H%M%S")
+def get_img():
+    image_url = input("Enter/Paste the URL for your image.\n")
+    data = requests.get(image_url)
+    return data.content
 
-def write_data(filename, raw_data, location):
-    if isInstance(location, zipfile.ZipFile):
-        location.writestr(filename, raw_data)
-    elif isInstance(location, str):
-        with open(os.path.join(location, filename), 'wb') as file:
-            shutil.copyfileobj(raw_data, file)
-    else:
-        raise TypeError("location must be ZipFile or string path")
+def get_txt():
+    print("Enter/Paste your content. Ctrl-D or Ctrl-Z ( windows ) to save it.")
+    contents = []
+    while True:
+        try:
+            line = input()
+        except EOFError:
+            break
+        contents.append(line)
 
-def save_image(raw_data, location, sequence=1):
-    ext = filetype.guess_extension(raw_data)
-    if ext is None:
-        raise RuntimeError("Could not guess filetype")
+    output = '\n'.join(contents).strip()
 
-    filename = filebase(sequence) + '.' + ext
+    return output
 
-    write_data(filename, raw_data, location)
 
-def save_text(text, location, sequence=1):
-    filename = filebase(sequence) + '.txt'
+def load_image(capData):
+    capData.append(get_img(), None)
+    return True
 
-    write_data(filename, text, location)
+def load_text(capData):
+    capData.append(None, get_txt())
+    return True
 
-def save_album(cap_list, location, sequence=1):
-    if isInstance(location, zipfile.ZipFile):
-        raise TypeError("Recursive albums not allowed")
+def load_caption(capData):
+    capData.append(get_img(), get_txt())
+    return True
 
-    filename = os.path.join(location, filebase(sequence) + '.zip')
+def quit_loading(capData):
+    print("    Quitting album load!")
+    return False
 
-    with zipfile.ZipFile(filename, 'w') as zipFile:
-        inner_seq = 1
-        for image, text in cap_list:
-            img_cap = image is not None
-            txt_cap = text is not None
 
-            if img_cap and txt_cap:
-                save_caption(image, text, zipFile, inner_seq)
-            elif img_cap:
-                save_image(image, zipFile, inner_seq)
-            elif txt_cap:
-                save_text(text, zipFile, inner_seq)
+def save_image(sequence, filepath):
+    capData = pack_caps.CapData(sequence)
+    load_image(capData)
+    capData.pack(filepath)
+    return True
 
-            inner_seq += 1
+def save_text(sequence, filepath):
+    capData = pack_caps.CapData(sequence)
+    load_text(capData)
+    capData.pack(filepath)
+    return True
 
-def save_caption(img_data, txt_data, location, sequence=1):
-    loc_str = isInstance(location, str)
-    loc_zip = isInstance(location, zipfile.ZipFile)
-    if not loc_str and not loc_zip:
-        raise TypeError("location must be ZipFile or string path")
+def save_caption(sequence, filepath):
+    capData = pack_caps.CapData(sequence)
+    load_caption(capData)
+    capData.pack(filepath)
+    return True
 
-    filename = filebase(sequence) + '.zip'
-    if loc_str:
-        filename = os.path.join(location, filename)
+albumInsts = {
+    'I':load_image,
+    'T':load_text,
+    'C':load_caption,
+    'Q':quit_loading
+}
 
-    with zipfile.ZipFile(filename, 'w') as zipFile:
-        save_image(img_data, zipFile)
-        save_text(txt_data, zipFile)
+def save_album(sequence, filepath):
+    albumData = pack_caps.AlbumData(sequence)
 
-    if loc_zip:
-        location.write(filename)
-        os.remove(filename)
+    keep_saving = True
+    while keep_saving:
+        try:
+            instruction = input("    Saving [I]mage, [T]ext, or [C]aption? ([Q]uit)\n")
+            keep_saving = albumInsts[instruction](albumData)
+            print("    Done loading!")
+        except Exception as e:
+            print("    Error processing instruction " + instruction + " during album load:", e)
+
+    albumData.pack(filepath)
+    return True
+
+def quit(sequence, filepath):
+    print("Quitting!")
+    return False
+
 
 instructions = {
     "I":save_image,
@@ -81,32 +94,24 @@ instructions = {
     "Q":quit
 }
 
-def save_sequence(prompt, zip_file=None, post_save=None, indent=""):
+def save_sequence(filepath):
     sequence = 1
-    while True:
-        instruction = input(indent + prompt)
-        keep_saving = True
-        filebase = str(sequence) + '_' + datetime.datetime.now().strftime("%m%d%y%H%M%S")
+    keep_saving = True
+    while keep_saving:
         try:
-            keep_saving = instructions[instruction](zip_file, filebase)
-
-            if post_save is not None:
-                post_save(filebase)
-    
-            print(indent + "Done!")
+            instruction = input("Saving [I]mage, [T]ext, [A]lbum, or [C]aption? ([Q]uit)\n")
+            keep_saving = instructions[instruction](sequence, filepath)
+            print("Done!")
         except Exception as e:
-            print(indent + "Error processing instruction " + instruction + ": ", e)
-
-        if not keep_saving:
-            break
+            print("Error processing instruction " + instruction + ":", e)
 
         sequence += 1
 
-def post_save(filebase):
-    names = glob.glob(filebase + '*')
-    for name in names:
-        shutil.move(name, '../Incoming/' + name)
-
 if __name__ == "__main__":
-    save_sequence("Saving [I]mage, [T]ext, [A]lbum, or [C]aption? ([Q]uit)\n", None, post_save)
+    parser = argparse.ArgumentParser(description="Save collections of images and text.")
+    parser.add_argument('--dirname', default="../Incoming", help='The directory the caps will be saved to')
+
+    args = parser.parse_args()
+
+    save_sequence(args.dirname)
 
