@@ -6,6 +6,8 @@ from tkinter import messagebox
 import PIL
 from PIL import Image
 from PIL import ImageTk
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 import cv2
 import os
 import random
@@ -310,7 +312,7 @@ class VideoPlayerApp:
         self.imageLabel.pack(fill=tk.BOTH, expand=True)
         m1.add(self.imageLabel)
 
-        self.textBox = ScrolledText.ScrolledText(m1, wrap=tk.WORD, state=tk.DISABLED)
+        self.textBox = ScrolledText.ScrolledText(m1, wrap=tk.WORD, state=tk.DISABLED, font=("Sans Serif", 13))
         self.textBox.pack(fill=tk.BOTH, expand=True)
         m1.add(self.textBox)
 
