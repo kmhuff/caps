@@ -15,6 +15,11 @@ import zipfile
 import numpy
 import argparse
 import filetype
+import sys
+
+
+# constants and enums
+BEGIN = "BEGIN"
 
 
 class ImageManager():
@@ -194,6 +199,12 @@ class FileNavigator:
         self.wipe_seq_data()
         return self.multiplex(self.files[self.idx])
 
+    def get_first_file(self):
+        self.idx = 0
+        self.wipe_tmp()
+        self.wipe_seq_data()
+        return self.multiplex(self.files[self.idx])
+
     def get_next(self):
         self.idx = self.wrap_idx(self.idx+1, len(self.files))
         self.wipe_tmp()
@@ -323,9 +334,11 @@ class VideoPlayerApp:
         source_dir = os.path.dirname(os.path.realpath(__file__))
         self.fileNav = FileNavigator(dirname, os.path.join(source_dir, "tmp"), os.path.join(source_dir, "resources"))
 
-        # select first file randomly and make a manager for it
+        # select first file and make a manager for it
         if filename is None:
             imgfile,txtfile = self.fileNav.get_random_file()
+        elif filename == BEGIN:
+            imgfile,txtfile = self.fileNav.get_first_file()
         else:
             imgfile,txtfile = self.fileNav.get_file_from_name(filename)
 
@@ -337,6 +350,9 @@ class VideoPlayerApp:
 
         # call update
         self.update()
+
+    def get_filename(self):
+        return self.fileNav.get_filename()
 
     def update(self):
         # Update image
@@ -404,7 +420,12 @@ class VideoPlayerApp:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="View collections of images and text.")
     parser.add_argument('--dirname', default=".", help='The directory to be opened')
-    parser.add_argument('--filename', help='The file to be viewed (relative to dirname, can\'t be in a subdirectory)')
+    parser.add_argument('--filename', help='The file to be viewed (relative to dirname, can\'t be in a subdirectory). Incompatible with other starting file options.')
+    parser.add_argument('--begin', action='store_true', help='View the first file in dirname, alphabetically. Incompatible with other starting file options.')
+    parser.add_argument('--ignore-mark', dest='ignore_mark', action='store_true', help='Ignore the bookmark file. Other starting file options (like filename and begin) imply ignore-mark.')
+    parser.add_argument('--bookmark', default='bookmark.txt', help='Bookmark file to use to determine starting file. If not present, default is random selection.')
+    parser.add_argument('--no-marking', dest='no_marking', action='store_true', help='Do not write your final position to the bookmark.')
+    parser.add_argument('--marking-file', dest='marking_file', default=None, help='File to write final position. Default is the value of --bookmark')
 
     args = parser.parse_args()
 
@@ -412,7 +433,26 @@ if __name__ == "__main__":
     root.title("Viewer")
     root.geometry("1400x900")
 
-    VideoPlayerApp(root, args.dirname, args.filename)
+    if args.filename is not None and args.begin:
+        sys.exit("--filename and --begin incompatible")
+
+    startFilename = None
+    if args.filename is not None:
+        startFilename = args.filename
+    elif args.begin:
+        startFilename = BEGIN
+    elif not args.ignore_mark and os.path.isfile(args.bookmark):
+        with open(args.bookmark, "r") as markfile:
+            startFilename = markfile.read().rstrip('\n')
+
+    app = VideoPlayerApp(root, args.dirname, startFilename)
 
     root.mainloop()
+
+    if not args.no_marking:
+        markfileName = args.bookmark
+        if args.marking_file is not None:
+            markfileName = args.marking_file
+        with open(markfileName, "w") as markfile:
+            markfile.write(app.get_filename())
 
