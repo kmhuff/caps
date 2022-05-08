@@ -175,11 +175,15 @@ class MediaManager:
 
 
 class FileNavigator:
-    def __init__(self, dirname, tmp_dir, resource_dir):
+    def __init__(self, dirname, tmp_dir, resource_dir, filelist = None):
         self.tmp_dir = tmp_dir
         self.resource_dir = resource_dir
 
-        self.files = [os.path.join(dirname, f) for f in os.listdir(dirname) if os.path.isfile(os.path.join(dirname, f))]
+        if filelist is not None:
+            self.files = filelist
+        else:
+            self.files = [os.path.join(dirname, f) for f in os.listdir(dirname) if os.path.isfile(os.path.join(dirname, f))]
+
         self.files.sort()
         self.idx = 0
 
@@ -313,7 +317,7 @@ class FileNavigator:
 
 
 class VideoPlayerApp:
-    def __init__(self, root, dirname, filename):
+    def __init__(self, root, dirname, filename, filelist = None):
         self.root = root
 
         m1 = tk.PanedWindow(root, borderwidth=16, sashrelief=tk.RAISED)
@@ -332,7 +336,7 @@ class VideoPlayerApp:
         m1.paneconfigure(self.imageLabel, width=(2*m1.winfo_width()/3))
 
         source_dir = os.path.dirname(os.path.realpath(__file__))
-        self.fileNav = FileNavigator(dirname, os.path.join(source_dir, "tmp"), os.path.join(source_dir, "resources"))
+        self.fileNav = FileNavigator(dirname, os.path.join(source_dir, "tmp"), os.path.join(source_dir, "resources"), filelist)
 
         # select first file and make a manager for it
         if filename is None:
@@ -417,6 +421,30 @@ class VideoPlayerApp:
                 self.newText(txtfile)
 
 
+def capViewerFromDir(dirname, startFilename):
+    root = tk.Tk()
+    root.title("Viewer")
+    root.geometry("1400x900")
+
+    app = VideoPlayerApp(root, dirname, startFilename)
+
+    root.mainloop()
+
+    return app
+
+
+def capViewerFromList(filelist):
+    root = tk.Tk()
+    root.title("Viewer")
+    root.geometry("1400x900")
+
+    app = VideoPlayerApp(root, None, BEGIN, filelist)
+
+    root.mainloop()
+
+    return app
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="View collections of images and text.")
     parser.add_argument('--dirname', default=".", help='The directory to be opened')
@@ -428,10 +456,6 @@ if __name__ == "__main__":
     parser.add_argument('--marking-file', dest='marking_file', default=None, help='File to write final position. Default is the value of --bookmark')
 
     args = parser.parse_args()
-
-    root = tk.Tk()
-    root.title("Viewer")
-    root.geometry("1400x900")
 
     if args.filename is not None and args.begin:
         sys.exit("--filename and --begin incompatible")
@@ -445,9 +469,7 @@ if __name__ == "__main__":
         with open(args.bookmark, "r") as markfile:
             startFilename = markfile.read().rstrip('\n')
 
-    app = VideoPlayerApp(root, args.dirname, startFilename)
-
-    root.mainloop()
+    app = capViewerFromDir(args.dirname, startFilename)
 
     if not args.no_marking:
         markfileName = args.bookmark
