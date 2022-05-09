@@ -11,11 +11,12 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 import cv2
 import os
 import random
-import zipfile
 import numpy
 import argparse
 import filetype
 import sys
+
+import navigate_caps
 
 
 # constants and enums
@@ -110,7 +111,6 @@ class MediaManager:
             print("Filetype of " + filename + " couldn't be detected, aborting")
             file = "blank.jpg"
             ext = "jpg"
-            #os.remove(raw_filename)
 
         if ext in ['jfif', 'jpeg', 'jpg', 'JPG', 'png', 'webp']:
             self.manager = ImageManager(file)
@@ -174,148 +174,6 @@ class MediaManager:
             self.set_scrollX(int(propX * self.unscaledX * self.scale), winX)
 
 
-class FileNavigator:
-    def __init__(self, dirname, tmp_dir, resource_dir, filelist = None):
-        self.tmp_dir = tmp_dir
-        self.resource_dir = resource_dir
-
-        if filelist is not None:
-            self.files = filelist
-        else:
-            self.files = [os.path.join(dirname, f) for f in os.listdir(dirname) if os.path.isfile(os.path.join(dirname, f))]
-
-        self.files.sort()
-        self.idx = 0
-
-        self.albumfile = None
-        self.subfiles = []
-        self.subIdx = 0
-
-    def get_random_file(self):
-        self.idx = random.randint(0, len(self.files) - 1)
-        self.wipe_tmp()
-        self.wipe_seq_data()
-        return self.multiplex(self.files[self.idx])
-
-    def get_file_from_name(self, filename):
-        self.idx = self.files.index(filename)
-        self.wipe_tmp()
-        self.wipe_seq_data()
-        return self.multiplex(self.files[self.idx])
-
-    def get_first_file(self):
-        self.idx = 0
-        self.wipe_tmp()
-        self.wipe_seq_data()
-        return self.multiplex(self.files[self.idx])
-
-    def get_next(self):
-        self.idx = self.wrap_idx(self.idx+1, len(self.files))
-        self.wipe_tmp()
-        self.wipe_seq_data()
-        return self.multiplex(self.files[self.idx])
-
-    def get_prev(self):
-        self.idx = self.wrap_idx(self.idx-1, len(self.files))
-        self.wipe_tmp()
-        self.wipe_seq_data()
-        return self.multiplex(self.files[self.idx])
-
-    def delete(self):
-        os.remove(self.files[self.idx])
-        self.files.pop(self.idx)
-        self.idx = self.wrap_idx(self.idx, len(self.files))
-        self.wipe_tmp()
-        self.wipe_seq_data()
-        return self.multiplex(self.files[self.idx])
-
-    def get_next_seq(self):
-        self.subIdx = self.wrap_idx(self.subIdx+1, len(self.subfiles))
-
-        self.wipe_tmp()
-
-        tmp_name = os.path.join(self.tmp_dir, self.subfiles[self.subIdx])
-        with zipfile.ZipFile(self.albumfile) as zip:
-            zip.extract(self.subfiles[self.subIdx], self.tmp_dir)
-
-        return self.multiplex(tmp_name)
-
-    def get_prev_seq(self):
-        self.subIdx = self.wrap_idx(self.subIdx-1, len(self.subfiles))
-
-        self.wipe_tmp()
-
-        tmp_name = os.path.join(self.tmp_dir, self.subfiles[self.subIdx])
-        with zipfile.ZipFile(self.albumfile) as zip:
-            zip.extract(self.subfiles[self.subIdx], self.tmp_dir)
-
-        return self.multiplex(tmp_name)
-
-    def multiplex(self, filename):
-        _,ext = os.path.splitext(filename)
-        if ext == '.zip':
-            with zipfile.ZipFile(filename) as zip:
-                ziplist = sorted(zip.namelist())
-
-                # reading caption
-                nonimg = [f for f in ziplist if os.path.splitext(f)[1] == '.txt']
-                img = [f for f in ziplist if os.path.splitext(f)[1] != '.txt']
-                if len(nonimg) == 1 and len(img) == 1:
-                    imgname = os.path.join(self.tmp_dir, img[0])
-                    nonimgname = os.path.join(self.tmp_dir, nonimg[0])
-
-                    zip.extract(nonimg[0], self.tmp_dir)
-                    zip.extract(img[0], self.tmp_dir)
-
-                    return imgname, nonimgname
-
-                # reading album
-                if self.albumfile is not None:
-                    # We shouldn't have recursive albums
-                    return os.path.join(self.resource_dir, 'blank.jpg'), os.path.join(self.resource_dir, 'album_error.txt')
-
-                self.albumfile = filename
-                self.subfiles = ziplist
-
-                tmp_name = os.path.join(self.tmp_dir, self.subfiles[self.subIdx])
-                zip.extract(self.subfiles[self.subIdx], self.tmp_dir)
-                return self.multiplex(tmp_name)
-
-        elif ext == '.txt':
-            return os.path.join(self.resource_dir, 'blank.jpg'), filename
-        else:
-            return filename, os.path.join(self.resource_dir, 'empty.txt')
-
-    def wipe_tmp(self):
-        for file in os.listdir(self.tmp_dir):
-            os.remove(os.path.join(self.tmp_dir, file))
-
-    def wipe_seq_data(self):
-        self.albumfile = None
-        self.subfiles = []
-        self.subIdx = 0
-
-    def wrap_idx(self, idx, max_len):
-        out_idx = idx
-        if idx == max_len:
-            out_idx = 0
-        if idx == -1:
-            out_idx = max_len - 1
-        return out_idx
-
-    def get_filename(self):
-        return self.files[self.idx]
-
-    def get_sub_filename_if_seq(self):
-        if self.albumfile is not None:
-            return self.subfiles[self.subIdx]
-        else:
-            return None
-
-    def __del__(self):
-        self.wipe_tmp()
-
-
 class VideoPlayerApp:
     def __init__(self, root, dirname, filename, filelist = None):
         self.root = root
@@ -335,8 +193,7 @@ class VideoPlayerApp:
         root.update()
         m1.paneconfigure(self.imageLabel, width=(2*m1.winfo_width()/3))
 
-        source_dir = os.path.dirname(os.path.realpath(__file__))
-        self.fileNav = FileNavigator(dirname, os.path.join(source_dir, "tmp"), os.path.join(source_dir, "resources"), filelist)
+        self.fileNav = navigate_caps.FileNavigator(dirname, filelist)
 
         # select first file and make a manager for it
         if filename is None:
