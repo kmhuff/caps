@@ -21,7 +21,7 @@ def get_txt():
 
     output = '\n'.join(contents).strip()
 
-    return bytes(output, "ascii")
+    return bytes(output, "utf-8")
 
 
 def load_image(capData):
