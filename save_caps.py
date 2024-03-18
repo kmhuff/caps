@@ -3,11 +3,25 @@
 import requests
 import pack_caps
 import argparse
+import glob
+import os
 
-def get_img():
-    image_url = input("Enter/Paste the URL for your image.\n")
-    data = requests.get(image_url)
-    return data.content
+def get_img(filepath):
+    image_url = input("Enter/Paste the URL for your image. Or leave blank for latest downloaded image.\n")
+    if image_url:
+        data = requests.get(image_url)
+        return data.content
+    else:
+        # get latest image in folder
+        list_of_files = glob.glob(filepath + '/*')
+        latest_file = max(list_of_files, key=os.path.getctime)
+        confirmation = input("Use file " + latest_file + "? Y/N (Warning: this will delete the file)\n")
+        if confirmation == 'Y':
+            data = None
+            with open(latest_file, "rb") as in_file:
+                data = in_file.read()
+            os.remove(latest_file)
+            return data
 
 def get_txt():
     print("Enter/Paste your content. Ctrl-D or Ctrl-Z ( windows ) to save it.")
@@ -24,26 +38,26 @@ def get_txt():
     return bytes(output, "utf-8")
 
 
-def load_image(capData):
-    capData.append(get_img(), None)
+def load_image(capData, filepath):
+    capData.append(get_img(filepath), None)
     return True
 
-def load_text(capData):
+def load_text(capData, filepath=None):
     capData.append(None, get_txt())
     return True
 
-def load_caption(capData):
-    capData.append(get_img(), get_txt())
+def load_caption(capData, filepath):
+    capData.append(get_img(filepath), get_txt())
     return True
 
-def quit_loading(capData):
+def quit_loading(capData, filepath=None):
     print("    Quitting album load!")
     return False
 
 
 def save_image(sequence, filepath):
     capData = pack_caps.CapData(sequence)
-    load_image(capData)
+    load_image(capData, filepath)
     capData.pack(filepath)
     return True
 
@@ -55,7 +69,7 @@ def save_text(sequence, filepath):
 
 def save_caption(sequence, filepath):
     capData = pack_caps.CapData(sequence)
-    load_caption(capData)
+    load_caption(capData, filepath)
     capData.pack(filepath)
     return True
 
@@ -73,7 +87,7 @@ def save_album(sequence, filepath):
     while keep_saving:
         try:
             instruction = input("    Saving [I]mage, [T]ext, or [C]aption? ([Q]uit)\n")
-            keep_saving = albumInsts[instruction](albumData)
+            keep_saving = albumInsts[instruction](albumData, filepath)
             print("    Done loading!")
         except Exception as e:
             print("    Error processing instruction " + instruction + " during album load:", e)
