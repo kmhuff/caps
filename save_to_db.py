@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import os.path
 import sqlite3
 
 def save_sequence(db_file, data_dir):
@@ -9,9 +10,15 @@ def save_sequence(db_file, data_dir):
     cursor = connection.cursor()
     cursor.execute("PRAGMA foreign_keys = ON")
 
-    make_new_record = True
+    while True:
+        # User input: make new record or quit
+        make_record_inst = input("[M]ake new record or [Q]uit?\n")
+        if make_record_inst == "Q":
+            break
+        elif make_record_inst != "M":
+            print("Error during user input: Must be 'M' or 'Q'")
+            continue
 
-    while make_new_record:
         abort_record = False
         record_id = None
 
@@ -20,11 +27,14 @@ def save_sequence(db_file, data_dir):
             title = input("Enter a title for the new record (or leave blank):\n")
             if not title:
                 title = "null"
-            cursor.execute("insert into records (title) values (?)", title)
+            cursor.execute("insert into records (title) values (?)", (title,))
             record_id = cursor.lastrowid
 
-            # TODO: Tags
+            # Tags
             tags = input("Enter a comma-separated list of tags for the new record (or leave blank):\n")
+            tag_list = tags.split(",")
+            values_list = [(record_id, tag) for tag in tag_list]
+            cursor.executemany("insert into tags (record_id, name) values (?, ?)", values_list)
 
         except Exception as e:
             print("Error during record construction: ", e)
@@ -33,22 +43,92 @@ def save_sequence(db_file, data_dir):
 
         make_new_entry = True
         entry_idx = 0
+
         while make_new_entry:
-            # TODO: Insert entry
+            entry_id = None
+
+            try:
+                # Insert entry
+                cursor.execute("insert into record_entries (record_id, idx) values (?, ?)", (record_id, entry_idx))
+                entry_id = cursor.lastrowid
+                entry_idx += 1
+
+            except Exception as e:
+                print("Error during entry construction: ", e)
+                connection.rollback()
+                continue
+
             make_new_file = True
             while make_new_file:
-                # TODO: User input: grabbed blob file, copied text file, next entry, next record, abort record, quit
-                # TODO: Grabbed blob file
-                # TODO: Copied text file
-                # TODO: Next entry: make_new_file = False
-                # TODO: Next record: make_new_file = False; make_new_entry = False
-                # TODO: Abort record:  make_new_file = False; make_new_entry = False; abort_record = True
-                # TODO: Quit:  make_new_file = False; make_new_entry = False; make_new_record = False
+                # User input: grabbed blob file, copied text file, next entry, next record, abort record
+                make_file_inst = input("[B]lob file, [T]ext file, next [E]ntry, next [R]ecord, [A]bort record\n")
+
+                if make_file_inst == "B":
+                    try:
+                        # Grabbed blob file
+                        filename = None
+                        image_path = input("Enter the path for your image. Or leave blank for latest downloaded image.\n")
+                        if image_path:
+                            if os.path.isfile(image_path):
+                                filename = image_path
+                            else:
+                                print("Error during file construction: Invlid path ", image_path)
+                                continue
+                        else:
+                            list_of_files = glob.glob(data_dir + '/*')
+                            filename = max(list_of_files, key=os.path.getctime)
+                            print ("Using ", filename)
+
+                        cursor.execute("insert into files (entry_id, filename) values (?, ?)", (entry_id, filename))
+                    except Exception as e:
+                        print("Error during file construction: ", e)
+                        continue
+
+                elif make_file_inst == "T":
+                    # TODO: Copied text file
+                    try:
+                        filename = None
+
+                        print("Enter/Paste your content. Ctrl-D or Ctrl-Z ( windows ) to save it.")
+                        contents = []
+                        while True:
+                            try:
+                                line = input()
+                            except EOFError:
+                                break
+                            contents.append(line)
+
+                        output = '\n'.join(contents).strip()
+
+                        #with open(os.path.join(location, filename), 'wb') as file:
+                            #file.write(raw_data)
+
+                        cursor.execute("insert into files (entry_id, filename) values (?, ?)", (entry_id, filename))
+                    except Exception as e:
+                        print("Error during file construction: ", e)
+                        continue
+
+                elif make_file_inst == "E":
+                    # Next entry
+                    make_new_file = False
+                elif make_file_inst == "R":
+                    # Next record:
+                    make_new_file = False
+                    make_new_entry = False
+                elif make_file_inst == "A":
+                    # Abort record:
+                    make_new_file = False
+                    make_new_entry = False
+                    abort_record = True
+                else:
+                    print("Error during file construction: Invlid instruction ", make_file_inst)
+                    continue
+
         if abort_record:
-            # TODO: rollback transaction
+            connection.rollback()
         else:
-            # TODO: commit transaction
-        
+            connection.commit()
+
 
 def check_integrity(dbFile, dataDir):
     # TODO: compare files in DB to files in data dir
