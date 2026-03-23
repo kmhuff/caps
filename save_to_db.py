@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 
 import argparse
-import os.path
+import datetime
+import os
 import sqlite3
 
-def save_sequence(db_file, data_dir):
-    # Open connection
-    connection = sqlite3.connect(db_file)
-    cursor = connection.cursor()
-    cursor.execute("PRAGMA foreign_keys = ON")
-
+def save_sequence(connection, cursor):
     while True:
         # User input: make new record or quit
         make_record_inst = input("[M]ake new record or [Q]uit?\n")
@@ -60,14 +56,14 @@ def save_sequence(db_file, data_dir):
 
             make_new_file = True
             while make_new_file:
-                # User input: grabbed blob file, copied text file, next entry, next record, abort record
-                make_file_inst = input("[B]lob file, [T]ext file, next [E]ntry, next [R]ecord, [A]bort record\n")
+                # User input: grabbed blob file, copied text file, next entry, finish record, abort record
+                make_file_inst = input("[B]lob file, pasted [T]ext file, [N]ext entry, [F]inish record, [A]bort record\n")
 
                 if make_file_inst == "B":
                     try:
                         # Grabbed blob file
                         filename = None
-                        image_path = input("Enter the path for your image. Or leave blank for latest downloaded image.\n")
+                        image_path = input("Enter the path for your file. Or leave blank for latest downloaded file.\n")
                         if image_path:
                             if os.path.isfile(image_path):
                                 filename = image_path
@@ -75,8 +71,7 @@ def save_sequence(db_file, data_dir):
                                 print("Error during file construction: Invlid path ", image_path)
                                 continue
                         else:
-                            list_of_files = glob.glob(data_dir + '/*')
-                            filename = max(list_of_files, key=os.path.getctime)
+                            filename = max(os.listdir(), key=os.path.getctime)
                             print ("Using ", filename)
 
                         cursor.execute("insert into files (entry_id, filename) values (?, ?)", (entry_id, filename))
@@ -85,9 +80,13 @@ def save_sequence(db_file, data_dir):
                         continue
 
                 elif make_file_inst == "T":
-                    # TODO: Copied text file
                     try:
-                        filename = None
+                        # Copied text file
+                        filename = datetime.datetime.now().strftime("%m%d%y%H%M%S") + ".txt"
+
+                        if os.path.isfile(filename):
+                            print("Error during file construction: Duplicate path ", filename)
+                            continue
 
                         print("Enter/Paste your content. Ctrl-D or Ctrl-Z ( windows ) to save it.")
                         contents = []
@@ -100,18 +99,18 @@ def save_sequence(db_file, data_dir):
 
                         output = '\n'.join(contents).strip()
 
-                        #with open(os.path.join(location, filename), 'wb') as file:
-                            #file.write(raw_data)
+                        with open(filename, 'w') as file:
+                            file.write(output)
 
                         cursor.execute("insert into files (entry_id, filename) values (?, ?)", (entry_id, filename))
                     except Exception as e:
                         print("Error during file construction: ", e)
                         continue
 
-                elif make_file_inst == "E":
+                elif make_file_inst == "N":
                     # Next entry
                     make_new_file = False
-                elif make_file_inst == "R":
+                elif make_file_inst == "F":
                     # Next record:
                     make_new_file = False
                     make_new_entry = False
@@ -130,9 +129,18 @@ def save_sequence(db_file, data_dir):
             connection.commit()
 
 
-def check_integrity(dbFile, dataDir):
-    # TODO: compare files in DB to files in data dir
-    pass
+def check_integrity(connection, cursor):
+    # Compare files in DB to files in data dir
+    # The lists of all files in data directory and all files in files table are the same size
+    dir_list = os.listdir()
+    db_list = [row[1] for row in cursor.execute("select * from files").fetchall()]
+    dir_only_set = set(dir_list) - set(db_list)
+    db_only_set = set(db_list) - set(dir_list)
+    if dir_only_set or db_only_set:
+        print("Error during integrity check: Mismatch between data dir and files table")
+        print("    Entries in data dir only: ", ", ".join(dir_only_set))
+        print("    Entries in files table only: ", ", ".join(db_only_set))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Save collections of images and text using a SQLite database.")
@@ -141,6 +149,17 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    save_sequence(args.db, args.data_dir)
+    # Open connection
+    connection = sqlite3.connect(args.db)
+    cursor = connection.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON")
 
-    check_integrity(args.db, args.data_dir)
+    # Enter data dir
+    if not os.path.isdir(args.data_dir):
+        print("Error during initialization: ", data_dir, " is not a directory")
+        quit()
+    os.chdir(args.data_dir)
+
+    save_sequence(connection, cursor)
+
+    check_integrity(connection, cursor)
