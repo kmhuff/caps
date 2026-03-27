@@ -3,21 +3,12 @@
 import argparse
 import datetime
 import os
+import signal
 import sqlite3
+import sys
 
 def save_sequence(connection, cursor):
     while True:
-        # User input: make new record or quit
-        make_record_inst = input("[M]ake new record or [Q]uit?\n")
-        if make_record_inst == "Q":
-            break
-        elif make_record_inst != "M":
-            print("Error during user input: Must be 'M' or 'Q'")
-            continue
-
-        abort_record = False
-        record_id = None
-
         try:
             # Title
             title = input("Enter a title for the new record (or leave blank):\n")
@@ -47,6 +38,7 @@ def save_sequence(connection, cursor):
                 # Insert entry
                 cursor.execute("insert into record_entries (record_id, idx) values (?, ?)", (record_id, entry_idx))
                 entry_id = cursor.lastrowid
+                print("Creating entry", entry_idx)
                 entry_idx += 1
 
             except Exception as e:
@@ -142,6 +134,16 @@ def check_integrity(connection, cursor):
         print("    Entries in files table only: ", ", ".join(db_only_set))
 
 
+class SignalHandler:
+    def __init__(self, connection):
+        self.connection = connection
+
+    def __call__(self, sig, frame):
+        self.connection.rollback()
+        print("User interrupt detected. Quitting")
+        sys.exit(0)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Save collections of images and text using a SQLite database.")
     parser.add_argument("--db", default="./database.db", help="The filename of the SQLite database.")
@@ -153,6 +155,9 @@ if __name__ == "__main__":
     connection = sqlite3.connect(args.db)
     cursor = connection.cursor()
     cursor.execute("PRAGMA foreign_keys = ON")
+
+    # Handle signal
+    signal.signal(signal.SIGINT, SignalHandler(connection))
 
     # Enter data dir
     if not os.path.isdir(args.data_dir):
