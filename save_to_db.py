@@ -40,37 +40,37 @@ def save_sequence(connection, cursor):
                 # Insert entry
                 cursor.execute("insert into record_entries (record_id, idx) values (?, ?)", (record_id, entry_idx))
                 entry_id = cursor.lastrowid
-                print("Creating entry", entry_idx)
+                print("    Creating entry", entry_idx)
                 entry_idx += 1
 
             except Exception as e:
-                print("Error during entry construction: ", e)
+                print("    Error during entry construction: ", e)
                 connection.rollback()
                 continue
 
             make_new_file = True
             while make_new_file:
                 # User input: grabbed blob file, copied text file, next entry, finish record, abort record
-                make_file_inst = input("[B]lob file, pasted [T]ext file, [N]ext entry, [F]inish record, [A]bort record\n")
+                make_file_inst = input("        [B]lob file, pasted [T]ext file, [N]ext entry, [F]inish record, [A]bort record\n")
 
                 if make_file_inst == "B":
                     try:
                         # Grabbed blob file
                         filename = None
-                        image_path = input("Enter the path for your file. Or leave blank for latest downloaded file.\n")
+                        image_path = input("        Enter the path for your file. Or leave blank for latest downloaded file.\n")
                         if image_path:
                             if os.path.isfile(image_path):
                                 filename = image_path
                             else:
-                                print("Error during file construction: Invlid path ", image_path)
+                                print("        Error during file construction: Invlid path ", image_path)
                                 continue
                         else:
                             filename = max(os.listdir(), key=os.path.getctime)
-                            print ("Using ", filename)
+                            print("        Using ", filename)
 
                         cursor.execute("insert into files (entry_id, filename) values (?, ?)", (entry_id, filename))
                     except Exception as e:
-                        print("Error during file construction: ", e)
+                        print("        Error during file construction: ", e)
                         continue
 
                 elif make_file_inst == "T":
@@ -79,10 +79,10 @@ def save_sequence(connection, cursor):
                         filename = datetime.datetime.now().strftime("%m%d%y%H%M%S") + ".txt"
 
                         if os.path.isfile(filename):
-                            print("Error during file construction: Duplicate path ", filename)
+                            print("        Error during file construction: Duplicate path ", filename)
                             continue
 
-                        print("Enter/Paste your content. Ctrl-D or Ctrl-Z ( windows ) to save it.")
+                        print("        Enter/Paste your content. Ctrl-D or Ctrl-Z ( windows ) to save it.")
                         contents = []
                         while True:
                             try:
@@ -98,7 +98,7 @@ def save_sequence(connection, cursor):
 
                         cursor.execute("insert into files (entry_id, filename) values (?, ?)", (entry_id, filename))
                     except Exception as e:
-                        print("Error during file construction: ", e)
+                        print("        Error during file construction: ", e)
                         continue
 
                 elif make_file_inst == "N":
@@ -114,7 +114,7 @@ def save_sequence(connection, cursor):
                     make_new_entry = False
                     abort_record = True
                 else:
-                    print("Error during file construction: Invlid instruction ", make_file_inst)
+                    print("        Error during file construction: Invlid instruction ", make_file_inst)
                     continue
 
         if abort_record:
@@ -144,8 +144,8 @@ class SignalHandler:
 
     def __call__(self, sig, frame):
         self.connection.rollback()
-        check_integrity(self.connection, self.cursor)
         print("User interrupt detected. Quitting")
+        check_integrity(self.connection, self.cursor)
         sys.exit(0)
 
 
