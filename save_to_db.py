@@ -9,6 +9,8 @@ import sys
 
 def save_sequence(connection, cursor):
     while True:
+        abort_record = False
+
         try:
             # Title
             title = input("Enter a title for the new record (or leave blank):\n")
@@ -122,6 +124,7 @@ def save_sequence(connection, cursor):
 
 
 def check_integrity(connection, cursor):
+    print("Checking integrity...")
     # Compare files in DB to files in data dir
     # The lists of all files in data directory and all files in files table are the same size
     dir_list = os.listdir()
@@ -135,11 +138,13 @@ def check_integrity(connection, cursor):
 
 
 class SignalHandler:
-    def __init__(self, connection):
+    def __init__(self, connection, cursor):
         self.connection = connection
+        self.cursor = cursor
 
     def __call__(self, sig, frame):
         self.connection.rollback()
+        check_integrity(self.connection, self.cursor)
         print("User interrupt detected. Quitting")
         sys.exit(0)
 
@@ -166,5 +171,3 @@ if __name__ == "__main__":
     os.chdir(args.data_dir)
 
     save_sequence(connection, cursor)
-
-    check_integrity(connection, cursor)
