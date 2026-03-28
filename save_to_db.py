@@ -162,7 +162,7 @@ if __name__ == "__main__":
     cursor.execute("PRAGMA foreign_keys = ON")
 
     # Handle signal
-    signal.signal(signal.SIGINT, SignalHandler(connection))
+    signal.signal(signal.SIGINT, SignalHandler(connection, cursor))
 
     # Enter data dir
     if not os.path.isdir(args.data_dir):
